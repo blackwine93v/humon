@@ -95,6 +95,10 @@ ignore = ["S101", "S603", "S607", "RUF012"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+# Put the repo root on sys.path so the top-level `evals/` package is importable
+# under plain `pytest` (CI), not just `python -m pytest`. `evals/` is a test/dev
+# harness and is intentionally not part of the installed `humon` wheel.
+pythonpath = ["."]
 addopts = "-q"
 markers = [
     "slow: tests that shell out (e.g. pip install a scaffolded plugin)",
