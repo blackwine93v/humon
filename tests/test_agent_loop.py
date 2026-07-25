@@ -6,11 +6,9 @@ policy allow/deny/approval paths the loop must honour.
 
 from __future__ import annotations
 
-import logging
-
 import pytest
 
-from conftest import make_config
+from conftest import make_config, make_logger
 from humon.core.agent import Agent
 from humon.core.policy import PolicyEngine
 from humon.providers.fake import FakeProvider, text_response, tool_response
@@ -26,7 +24,7 @@ def build_agent(db, config, provider):
         config=config,
         session_repo=SessionRepo(db),
         audit=AuditRepo(db),
-        logger=logging.getLogger("test"),
+        logger=make_logger(),
     )
 
 

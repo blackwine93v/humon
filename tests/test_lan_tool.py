@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 
 import pytest
 
+from conftest import make_logger
 from humon.core.interfaces import ToolContext
 from humon.tools.lan import LanTool
 
@@ -19,7 +19,7 @@ def ctx(cidrs: list[str]) -> ToolContext:
         session_id="t",
         config={"allowed_cidrs": cidrs, "timeout_s": 2},
         jail_paths=[],
-        logger=logging.getLogger("t"),
+        logger=make_logger(),
         request_approval=_a,
     )
 

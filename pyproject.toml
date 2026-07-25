@@ -47,6 +47,7 @@ dev = [
     "import-linter>=2.0",
     "detect-secrets>=1.5",
     "types-PyYAML",
+    "hatchling>=1.25",  # for the pip-install plugin roundtrip test (--no-build-isolation)
 ]
 
 [project.scripts]
@@ -95,6 +96,9 @@ ignore = ["S101", "S603", "S607", "RUF012"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 addopts = "-q"
+markers = [
+    "slow: tests that shell out (e.g. pip install a scaffolded plugin)",
+]
 
 [tool.mypy]
 python_version = "3.11"

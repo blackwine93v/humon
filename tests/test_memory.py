@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-import logging
-
 import pytest
 
-from conftest import build_memory
+from conftest import build_memory, make_logger
 from humon.core.interfaces import ToolContext
 from humon.providers.fake import FakeProvider
 from humon.tools.memory import MemoryTool
@@ -20,7 +18,7 @@ def mem_ctx(memory) -> ToolContext:
         session_id="t",
         config={},
         jail_paths=[],
-        logger=logging.getLogger("t"),
+        logger=make_logger(),
         request_approval=_a,
         memory=memory,
     )
@@ -83,7 +81,7 @@ async def test_memory_tool_without_memory_available(db):
         session_id="t",
         config={},
         jail_paths=[],
-        logger=logging.getLogger("t"),
+        logger=make_logger(),
         request_approval=_a,
         memory=None,
     )

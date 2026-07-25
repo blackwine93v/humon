@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import logging
 from datetime import datetime
 
 import pytest
 
+from conftest import make_logger
 from humon.core.scheduler import Scheduler, compute_next_run
 from humon.state.repositories import TaskRepo
 
@@ -41,7 +41,7 @@ async def test_add_list_delete(db):
     async def on_due(row):
         ran.append(row)
 
-    sched = Scheduler(TaskRepo(db), on_due, logging.getLogger("t"), now_fn=lambda: 1000.0)
+    sched = Scheduler(TaskRepo(db), on_due, make_logger(), now_fn=lambda: 1000.0)
     task_id, next_run = await sched.add_task("ping the NAS", "every:60", session_id="s1")
     assert next_run == 1060.0
 
@@ -59,7 +59,7 @@ async def test_tick_runs_due_task_and_reschedules(db):
     async def on_due(row):
         ran.append(row)
 
-    sched = Scheduler(TaskRepo(db), on_due, logging.getLogger("t"), now_fn=lambda: 1000.0)
+    sched = Scheduler(TaskRepo(db), on_due, make_logger(), now_fn=lambda: 1000.0)
     await sched.add_task("check NAS", "every:60", session_id="s1")
 
     # Not due yet at t=1000 (next_run=1060).
@@ -76,7 +76,7 @@ async def test_task_survives_restart(db):
     async def noop(_row):
         return None
 
-    sched1 = Scheduler(TaskRepo(db), noop, logging.getLogger("t"), now_fn=lambda: 1000.0)
+    sched1 = Scheduler(TaskRepo(db), noop, make_logger(), now_fn=lambda: 1000.0)
     await sched1.add_task("morning NAS check", "every:30", session_id="s1")
 
     # Simulate a process restart: brand-new Scheduler over the SAME database.
@@ -85,6 +85,6 @@ async def test_task_survives_restart(db):
     async def on_due(row):
         ran.append(row)
 
-    sched2 = Scheduler(TaskRepo(db), on_due, logging.getLogger("t"), now_fn=lambda: 2000.0)
+    sched2 = Scheduler(TaskRepo(db), on_due, make_logger(), now_fn=lambda: 2000.0)
     assert await sched2.tick(now=2000.0) == 1
     assert ran[0]["description"] == "morning NAS check"

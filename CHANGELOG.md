@@ -68,6 +68,22 @@ All notable changes to Humon are documented here. Format loosely follows
 - M4 exit test: a "check the NAS every morning at 8 and DM me" task is created,
   survives a simulated restart, executes, delivers a message, and reschedules.
 
-### Planned
-- M5 — OpenAI/Ollama providers, entry-point plugins, `humon new-tool`, eval harness
-  in CI, docs, model routing.
+### M5 — Platform & community ✅
+- OpenAI-compatible and Ollama providers (lazy SDK/httpx import; tools + embeddings;
+  message normalization mapped to the shared `CompletionResponse`).
+- Entry-point plugin loading proven end-to-end: a scaffolded tool installs via pip,
+  is discovered through the `humon.tools` group, config-gates, passes policy, and
+  would appear in `!tools` (real pip-roundtrip test).
+- `humon new-tool` scaffold generates an installable plugin skeleton with a test.
+- Eval harness (`evals/`): 22 behavioral tasks with programmatic graders, run on
+  FakeProvider in CI and mirrored as parametrized pytest cases; real-provider job is
+  env-gated.
+- Model routing (FR-3.6): strong model for planning/reflection, cheap model for
+  context compaction, default for routine steps.
+- Docs: quickstart, write-your-first-tool, hardening.
+
+## Status
+
+All milestones M1–M5 implemented. 109 unit/integration tests + 22 eval tasks pass;
+CI gate = ruff, ruff-format, mypy (strict on core), import-linter, pytest,
+detect-secrets, evals.
