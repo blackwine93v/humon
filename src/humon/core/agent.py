@@ -14,6 +14,7 @@ executor of M1.
 from __future__ import annotations
 
 import asyncio
+import os
 import time
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
@@ -24,6 +25,7 @@ from ..state.repositories import AuditEntry, AuditRepo, SessionRepo
 from .errors import LoopGuardTripped
 from .interfaces import (
     ApprovalFn,
+    Capabilities,
     CompletionRequest,
     LLMProvider,
     MemoryStore,
@@ -83,6 +85,8 @@ class Agent:
         reflector: Reflector | None = None,
         memory: MemoryManager | None = None,
         tasks: TaskStore | None = None,
+        services: Capabilities | None = None,
+        data_dir: str | None = None,
     ) -> None:
         self.provider = provider
         self.tools = tools
@@ -95,6 +99,8 @@ class Agent:
         self.reflector = reflector
         self.memory = memory
         self.tasks = tasks
+        self.services = services
+        self.data_dir = data_dir
 
     def _tool_defs(self) -> list[ToolDef]:
         return [
@@ -305,6 +311,8 @@ class Agent:
             request_approval=request_approval,
             memory=self.memory,
             tasks=self.tasks,
+            services=self.services,
+            data_dir=self._tool_data_dir(name),
         )
         started = time.monotonic()
         try:
@@ -354,3 +362,12 @@ class Agent:
             return []
         data = settings.model_dump()
         return list(data.get("jail_paths", []) or [])
+
+    def _tool_data_dir(self, name: str) -> str | None:
+        """A private per-tool storage path (``<data_dir>/tools/<name>``), or None
+        if no data root is configured. Not created here — a tool that needs it
+        creates it lazily (core avoids blocking filesystem I/O on the loop)."""
+
+        if not self.data_dir:
+            return None
+        return os.path.join(self.data_dir, "tools", name)

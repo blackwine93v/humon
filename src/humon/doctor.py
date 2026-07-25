@@ -12,7 +12,12 @@ from dataclasses import dataclass
 
 from .config import Config, load_config
 from .core.errors import HumonError
-from .core.registry import discover_channels, discover_providers, discover_tools
+from .core.registry import (
+    discover_capabilities,
+    discover_channels,
+    discover_providers,
+    discover_tools,
+)
 from .state.db import Database
 
 
@@ -43,7 +48,10 @@ async def run_doctor(config_path: str) -> list[Check]:
     # 4. Tools.
     checks.append(_check_tools(config))
 
-    # 5. Database schema.
+    # 5. Capabilities.
+    checks.append(_check_capabilities(config))
+
+    # 6. Database schema.
     checks.append(await _check_db(config))
 
     return checks
@@ -64,6 +72,7 @@ def _check_provider(config: Config) -> Check:
 def _check_channels(config: Config) -> list[Check]:
     out: list[Check] = []
     available = discover_channels()
+    enabled = config.enabled_channels()
     slack = config.channels.slack
     if slack.enabled:
         if "slack" not in available:
@@ -78,9 +87,35 @@ def _check_channels(config: Config) -> list[Check]:
             )
         else:
             out.append(Check("channel:slack", True, "tokens present"))
+    # Third-party channels: verify they are installed (their own start() validates
+    # credentials at runtime).
+    for name in enabled:
+        if name == "slack":
+            continue
+        installed = name in available and available[name].__class__.__name__ != "_BrokenPlugin"
+        out.append(
+            Check(
+                f"channel:{name}",
+                installed,
+                "installed" if installed else "enabled but plugin not installed",
+            )
+        )
     if not out:
         out.append(Check("channels", False, "no channels enabled"))
     return out
+
+
+def _check_capabilities(config: Config) -> Check:
+    available = discover_capabilities()
+    enabled = config.enabled_capabilities()
+    missing = [
+        c
+        for c in enabled
+        if c not in available or available[c].__class__.__name__ == "_BrokenPlugin"
+    ]
+    if missing:
+        return Check("capabilities", False, f"enabled but not installed: {', '.join(missing)}")
+    return Check("capabilities", True, f"{len(enabled)} enabled: {', '.join(enabled) or '(none)'}")
 
 
 def _check_tools(config: Config) -> Check:

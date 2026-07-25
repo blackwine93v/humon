@@ -36,6 +36,11 @@ channels:
     # Human-in-the-loop approval reactions (FR-2.3).
     approve_reaction: "white_check_mark" # ✅
     deny_reaction: "x"                   # ❌
+  # Third-party channels (shipped as plugins) add their own block here, keyed by
+  # their entry-point name, and are enabled the same way — e.g.:
+  # matrix:
+  #   enabled: true
+  #   homeserver: https://matrix.example.org
 
 # ── Tools ────────────────────────────────────────────────────────────────────
 # Every tool is DISABLED until it appears here (FR-4 / FR-6.3). Removing a block
@@ -74,6 +79,17 @@ tools:
   memory:
     enabled: false
 
+# ── Capabilities (FR-7) ──────────────────────────────────────────────────────
+# Named host services provided by plugins and reached by tools via
+# `ctx.services`. Like tools, a capability is DISABLED until listed here, and it
+# gets its own private storage under `state.data_dir/capabilities/<name>/`.
+# Example (a future `humon-vault` package):
+# capabilities:
+#   vault_index:
+#     enabled: true
+#     vault_path: /srv/obsidian
+capabilities: {}
+
 # ── Policy engine (FR-6) ─────────────────────────────────────────────────────
 policy:
   # Global default when no rule matches: allow | deny | require_approval
@@ -92,6 +108,13 @@ policy:
     "memory.read": allow
     "memory.write": allow
     "schedule.write": require_approval
+    # Future plugin packs declare their own permission namespaces; the same
+    # most-restrictive-wins engine gates them. Anything unlisted falls to
+    # `default_decision` (deny). Examples:
+    # "vault.read": allow
+    # "vault.write": require_approval
+    # "code.read": allow
+    # "code.exec": require_approval
 
 # ── Loop guards & concurrency (FR-3.3 / FR-3.7) ──────────────────────────────
 limits:
@@ -117,6 +140,8 @@ agent:
 # ── Persistence ──────────────────────────────────────────────────────────────
 state:
   db_path: /var/lib/humon/humon.sqlite
+  # Root for per-plugin private storage; each capability gets its own subdir.
+  data_dir: /var/lib/humon/data
 
 # ── Logging (FR-1.4) ─────────────────────────────────────────────────────────
 logging:

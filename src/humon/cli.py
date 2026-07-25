@@ -36,9 +36,11 @@ def main(argv: list[str] | None = None) -> int:
     p_export.add_argument("-c", "--config", default=_DEFAULT_CONFIG)
     p_export.add_argument("-o", "--out", default="-", help="Output file, or - for stdout.")
 
-    p_new = sub.add_parser("new-tool", help="Scaffold a new tool plugin.")
-    p_new.add_argument("name", help="Tool name (snake_case).")
-    p_new.add_argument("--path", default=".", help="Directory to create the plugin in.")
+    # One scaffold command per extension seam; all share the same generator.
+    for kind in ("tool", "capability", "channel", "provider"):
+        p = sub.add_parser(f"new-{kind}", help=f"Scaffold a new {kind} plugin.")
+        p.add_argument("name", help=f"{kind.capitalize()} name (snake_case).")
+        p.add_argument("--path", default=".", help="Directory to create the plugin in.")
 
     args = parser.parse_args(argv)
 
@@ -49,8 +51,8 @@ def main(argv: list[str] | None = None) -> int:
             return _cmd_doctor(args.config)
         if args.command == "audit":
             return _cmd_audit_export(args.config, args.out)
-        if args.command == "new-tool":
-            return _cmd_new_tool(args.name, args.path)
+        if args.command and args.command.startswith("new-"):
+            return _cmd_new_plugin(args.command.removeprefix("new-"), args.name, args.path)
     except HumonError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
@@ -107,12 +109,15 @@ def _cmd_audit_export(config_path: str, out: str) -> int:
     return 0
 
 
-def _cmd_new_tool(name: str, path: str) -> int:
-    from .scaffold import scaffold_tool
+def _cmd_new_plugin(kind: str, name: str, path: str) -> int:
+    from .scaffold import scaffold_plugin
 
-    dest = scaffold_tool(name, path)
-    print(f"Created tool plugin skeleton at {dest}")
-    print("Next: implement execute(), add tests, then `pip install -e .` and enable it in config.")
+    dest = scaffold_plugin(kind, name, path)
+    print(f"Created {kind} plugin skeleton at {dest}")
+    print(
+        f"Next: implement it, add tests, then `pip install -e .` and enable the "
+        f"{kind} in config (installation never activates a plugin)."
+    )
     return 0
 
 

@@ -1,10 +1,11 @@
 """Plugin discovery via Python entry points (FR-7.1 / FR-7.2).
 
-Built-in and third-party tools, channels, and providers are all discovered the
-same way — through the ``humon.tools`` / ``humon.channels`` / ``humon.providers``
-entry-point groups. Discovery is not activation: installing a plugin makes it
-*discoverable*, but the app only ever instantiates what config explicitly lists
-(FR-7.2). This keeps "pip install" from ever silently enabling a capability.
+Built-in and third-party tools, channels, providers, and capabilities are all
+discovered the same way — through the ``humon.tools`` / ``humon.channels`` /
+``humon.providers`` / ``humon.capabilities`` entry-point groups. Discovery is
+not activation: installing a plugin makes it *discoverable*, but the app only
+ever instantiates what config explicitly lists (FR-7.2). This keeps
+"pip install" from ever silently enabling a capability.
 """
 
 from __future__ import annotations
@@ -15,6 +16,7 @@ from typing import Any
 GROUP_TOOLS = "humon.tools"
 GROUP_CHANNELS = "humon.channels"
 GROUP_PROVIDERS = "humon.providers"
+GROUP_CAPABILITIES = "humon.capabilities"
 
 
 def _load_group(group: str) -> dict[str, Any]:
@@ -45,3 +47,7 @@ def discover_channels() -> dict[str, Any]:
 
 def discover_providers() -> dict[str, Any]:
     return _load_group(GROUP_PROVIDERS)
+
+
+def discover_capabilities() -> dict[str, Any]:
+    return _load_group(GROUP_CAPABILITIES)

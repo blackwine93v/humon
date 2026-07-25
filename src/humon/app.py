@@ -9,18 +9,25 @@ commands), and manages graceful shutdown (FR-1.3).
 from __future__ import annotations
 
 import asyncio
+import os
 import signal
 from typing import Any
 
 from .config import Config
 from .core.agent import Agent
+from .core.capabilities import ServiceRegistry
 from .core.errors import HumonError
-from .core.interfaces import InboundMessage
+from .core.interfaces import CAP_EMBEDDINGS, CapabilityContext, InboundMessage
 from .core.memory import MemoryManager
 from .core.planner import LLMPlanner
 from .core.policy import PolicyEngine
 from .core.reflector import LLMReflector
-from .core.registry import discover_channels, discover_providers, discover_tools
+from .core.registry import (
+    discover_capabilities,
+    discover_channels,
+    discover_providers,
+    discover_tools,
+)
 from .core.scheduler import Scheduler
 from .core.session import SessionBusy, SessionManager
 from .logging import get_logger
@@ -47,6 +54,8 @@ class App:
         self.scheduler: Scheduler | None = None
         self._channel_by_name: dict[str, Any] = {}
         self.tools: dict[str, Any] = {}
+        self.services = ServiceRegistry()
+        self._capabilities: list[Any] = []  # active CapabilityProvider instances
 
     async def build(self) -> None:
         await self.db.connect()
@@ -93,6 +102,15 @@ class App:
             self.task_repo, self._run_scheduled, get_logger("humon.scheduler")
         )
 
+        # Capability seam (FR-7): host services register under well-known names,
+        # then config-enabled plugin capabilities are set up and registered too.
+        # Tools reach any of them by name through ``ToolContext.services``.
+        self.services.register("memory", memory)
+        self.services.register("tasks", self.scheduler)
+        if CAP_EMBEDDINGS in getattr(provider, "capabilities", set()):
+            self.services.register("embeddings", provider)
+        await self._build_capabilities()
+
         self.agent = Agent(
             provider=provider,
             tools=self.tools,
@@ -105,6 +123,8 @@ class App:
             reflector=reflector,
             memory=memory,
             tasks=self.scheduler,
+            services=self.services,
+            data_dir=self.config.state.data_dir,
         )
         self._channels = self._build_channels()
         self._channel_by_name = {c.name: c for c in self._channels}
@@ -112,6 +132,7 @@ class App:
             "app.built",
             provider=provider.name,
             tools=list(self.tools),
+            capabilities=self.services.names(),
             channels=[c.name for c in self._channels],
             memory=memory is not None,
             vectors=bool(memory and getattr(memory.vectors, "enabled", False)),
@@ -146,12 +167,45 @@ class App:
     def _build_channels(self) -> list[Any]:
         available = discover_channels()
         built: list[Any] = []
-        slack_cfg = self.config.channels.slack
-        if slack_cfg.enabled:
-            cls = available.get("slack")
-            if cls and not _is_broken(cls):
-                built.append(cls(slack_cfg.model_dump()))
+        for name, slice_cfg in self.config.enabled_channels().items():
+            cls = available.get(name)
+            if cls is None or _is_broken(cls):
+                self.logger.warning("channel.unavailable", channel=name)
+                continue
+            built.append(cls(slice_cfg))
         return built
+
+    async def _build_capabilities(self) -> None:
+        """Set up each config-enabled capability plugin and register the service
+        it returns. A capability gets its own private ``data_dir`` subtree and a
+        handle to host services already registered (e.g. ``embeddings``)."""
+
+        available = discover_capabilities()
+        data_root = self.config.state.data_dir
+        for name in self.config.enabled_capabilities():
+            cls = available.get(name)
+            if cls is None or _is_broken(cls):
+                self.logger.warning("capability.unavailable", capability=name)
+                continue
+            settings = self.config.capabilities.get(name)
+            cap_dir = os.path.join(data_root, "capabilities", name)
+            await asyncio.to_thread(os.makedirs, cap_dir, exist_ok=True)
+            provider = cls()
+            ctx = CapabilityContext(
+                name=name,
+                config=settings.model_dump() if settings is not None else {},
+                logger=get_logger(f"humon.capability.{name}"),
+                data_dir=cap_dir,
+                services=self.services,
+            )
+            try:
+                service = await provider.setup(ctx)
+            except Exception:
+                self.logger.exception("capability.setup_failed", capability=name)
+                continue
+            self._capabilities.append(provider)
+            self.services.register(name, service)
+            self.logger.info("capability.ready", capability=name)
 
     # ── run loop ──────────────────────────────────────────────────────────────
     async def run(self) -> None:
@@ -179,6 +233,11 @@ class App:
                 await channel.stop()
             except Exception:
                 self.logger.exception("channel.stop.error", channel=channel.name)
+        for capability in self._capabilities:
+            try:
+                await capability.aclose()
+            except Exception:
+                self.logger.exception("capability.stop.error", capability=capability.name)
         await self.db.close()
 
     async def _run_scheduled(self, task_row: dict[str, Any]) -> None:
@@ -278,6 +337,7 @@ class App:
                 "`!status` — uptime, sessions, tools\n"
                 "`!sessions` — active sessions\n"
                 "`!tools` — enabled tools\n"
+                "`!capabilities` — active capabilities\n"
                 "`!cancel` — stop this thread's task\n"
                 "`!audit` — recent tool calls\n"
                 "`!memory list` / `!memory forget <id>` — long-term memory"
@@ -285,6 +345,9 @@ class App:
         if cmd == "!tools":
             names = ", ".join(sorted(self.tools)) or "(none enabled)"
             return f"Enabled tools: {names}"
+        if cmd == "!capabilities":
+            names = ", ".join(self.services.names()) or "(none)"
+            return f"Active capabilities: {names}"
         if cmd == "!sessions":
             active = self.sessions.active_ids()
             return "Active sessions: " + (", ".join(active) if active else "none")

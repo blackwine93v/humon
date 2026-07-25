@@ -109,6 +109,10 @@ def reject_secrets(raw: dict[str, Any]) -> None:
 
 
 class ProviderConfig(BaseModel):
+    # extra="allow" so an out-of-tree provider has a config home: unknown keys
+    # are preserved and passed through to the provider's own constructor.
+    model_config = ConfigDict(extra="allow")
+
     name: str
     api_key_env: str | None = None
     base_url: str | None = None
@@ -138,11 +142,36 @@ class SlackConfig(BaseModel):
 
 
 class ChannelsConfig(BaseModel):
+    """Channel config. ``slack`` is the one built-in channel with a typed model;
+    third-party channels (shipped as plugins) add their own blocks under their
+    entry-point name, preserved via ``extra="allow"`` and read by the channel
+    from its own config slice (the same pattern tools use)."""
+
+    model_config = ConfigDict(extra="allow")
     slack: SlackConfig = Field(default_factory=SlackConfig)
+
+    def enabled_map(self) -> dict[str, dict[str, Any]]:
+        """Name → config slice for every enabled channel (built-in + plugins)."""
+
+        out: dict[str, dict[str, Any]] = {}
+        if self.slack.enabled:
+            out["slack"] = self.slack.model_dump()
+        for name, raw in (self.model_extra or {}).items():
+            if isinstance(raw, dict) and raw.get("enabled"):
+                out[name] = dict(raw)
+        return out
 
 
 class ToolSettings(BaseModel):
     """Per-tool config. Unknown keys are preserved so each tool reads its own."""
+
+    model_config = ConfigDict(extra="allow")
+    enabled: bool = False
+
+
+class CapabilitySettings(BaseModel):
+    """Per-capability config. Like tools, a capability is disabled until listed,
+    and unknown keys are preserved so the capability provider reads its own."""
 
     model_config = ConfigDict(extra="allow")
     enabled: bool = False
@@ -181,6 +210,10 @@ class AgentConfig(BaseModel):
 
 class StateConfig(BaseModel):
     db_path: str = "/var/lib/humon/humon.sqlite"
+    # Root for per-capability private storage. Each enabled capability gets its
+    # own ``<data_dir>/<name>/`` subdirectory so a plugin can persist without
+    # ever importing ``humon.state``.
+    data_dir: str = "/var/lib/humon/data"
 
 
 class LoggingConfig(BaseModel):
@@ -205,6 +238,7 @@ class Config(BaseModel):
     models: ModelsConfig
     channels: ChannelsConfig = Field(default_factory=ChannelsConfig)
     tools: dict[str, ToolSettings] = Field(default_factory=dict)
+    capabilities: dict[str, CapabilitySettings] = Field(default_factory=dict)
     policy: PolicyConfig = Field(default_factory=PolicyConfig)
     limits: LimitsConfig = Field(default_factory=LimitsConfig)
     memory: MemoryConfig = Field(default_factory=MemoryConfig)
@@ -217,6 +251,16 @@ class Config(BaseModel):
         """Names of tools explicitly enabled in config (FR-4 / FR-6.3)."""
 
         return [name for name, cfg in self.tools.items() if cfg.enabled]
+
+    def enabled_capabilities(self) -> list[str]:
+        """Names of capabilities explicitly enabled in config (same gate as tools)."""
+
+        return [name for name, cfg in self.capabilities.items() if cfg.enabled]
+
+    def enabled_channels(self) -> dict[str, dict[str, Any]]:
+        """Name → config slice for every enabled channel (built-in + plugins)."""
+
+        return self.channels.enabled_map()
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -1,4 +1,4 @@
-# AGENTS.md — contributor guide for agents working on Humon
+# CLAUDE.md — contributor guide for agents working on Humon
 
 This file is the contract for any agent (Claude Code or otherwise) editing this
 codebase. Read it before writing code. `AGENTS.md` is a copy of this file for
@@ -13,7 +13,7 @@ default. Full requirements live in the PRD; this file is the operational summary
 
 ```
 channels/  ─┐                                  ┌─  tools/
-providers/ ─┼──►  core.interfaces  ◄───────────┤
+providers/ ─┼──►  core.interfaces  ◄───────────┤   capabilities/  (plugin pkgs)
             │         ▲                         └─  (implement the protocols)
             │         │
           core/  ─────┘   (agent loop, policy, sessions, memory, scheduler)
@@ -24,17 +24,27 @@ providers/ ─┼──►  core.interfaces  ◄──────────�
 Enforced by import-linter (`.importlinter`, runs in CI):
 
 - `humon.core` MUST NOT import `humon.channels`, `humon.tools`, or `humon.providers`.
-- `humon.channels` / `humon.tools` / `humon.providers` may import **only**
-  `humon.core.interfaces` and `humon.core.errors` — never core internals, never `state`.
+- `humon.channels` / `humon.tools` / `humon.providers` (and any plugin package) may import
+  **only** `humon.core.interfaces` and `humon.core.errors` — never core internals, never `state`.
 - `humon.state` is used only by `core`; it may import `core.interfaces` for shared types.
 
 If you need a new cross-layer type, add it to `core/interfaces.py` — that module is
 the single shared vocabulary. Never widen a layer's imports to "make it work".
 
+**The capability seam.** A plugin that needs a *host service* the core doesn't already
+hand it (memory/tasks) must NOT get a new `ToolContext` field. Instead the service is
+registered by name in the `ServiceRegistry` (`core/capabilities.py`) and reached via
+`ctx.services.require("<name>")`. Host services register under well-known names
+(`memory`, `tasks`, `embeddings`); plugin-provided services implement `CapabilityProvider`
+(discovered via the `humon.capabilities` entry-point group) and register under their config
+name. `ctx.services.get()` returns `object` — narrow it to your own protocol; the core stays
+ignorant of your API. A capability persists under its private `ctx.data_dir`, never `state`.
+
 ## Security-by-default rules (never regress these)
 
-1. **Tools are disabled until config lists them.** Installation/registration is not
-   activation (`Config.enabled_tools()`). Never auto-enable a tool.
+1. **Tools (and capabilities/channels) are disabled until config lists them.**
+   Installation/registration is not activation (`Config.enabled_tools()` /
+   `enabled_capabilities()` / `enabled_channels()`). Never auto-enable a plugin.
 2. **Tools never self-authorize.** Every tool call goes through `PolicyEngine.check`
    in `core/agent.py` before `execute()`. A tool declares `permissions`; the engine
    decides `allow` / `deny` / `require_approval`. Most-restrictive permission wins.
@@ -62,6 +72,9 @@ the single shared vocabulary. Never widen a layer's imports to "make it work".
   `complete`, `embed`. Import the heavy SDK lazily inside the class. Degrade gracefully
   when a capability is absent.
 - **Channels**: implement `Channel`; `send` returns a `message_ref` usable with `update`.
+- **Capabilities**: implement `CapabilityProvider` (`name`, `async setup(ctx) -> object`,
+  `async aclose()`); return the service object registered under `name`. Reach it from a tool
+  with `ctx.services.require(name)`. Persist under `ctx.data_dir`; never import `state`.
 - **Logging**: structured, via `logging.get_logger(name)` — pass fields as kwargs.
 - **Config**: pydantic models in `config.py`; add options there and to
   `config.example.yaml` (commented).
@@ -70,16 +83,20 @@ the single shared vocabulary. Never widen a layer's imports to "make it work".
   optional extra (`[slack]`, `[anthropic]`, `[memory]`, …). Core + FakeProvider tests
   must run with no extras installed.
 
-## Adding a tool / channel / provider
+## Adding a tool / capability / channel / provider
 
 1. Implement the protocol from `core/interfaces.py` in the right layer.
-2. Register an entry point in `pyproject.toml` under `humon.tools` /
+2. Register an entry point in `pyproject.toml` under `humon.tools` / `humon.capabilities` /
    `humon.channels` / `humon.providers` (third-party plugins do the same in their own
    `pyproject.toml`).
-3. Add config: a `tools.<name>` block (with `enabled: false`) and any policy rules.
-4. Ship tests: unit tests for the component + any security guards. `humon new-tool`
-   scaffolds this shape.
+3. Add config: a `tools.<name>` / `capabilities.<name>` / `channels.<name>` block (with
+   `enabled: false`) and any policy rules for new permission namespaces.
+4. Ship tests: unit tests for the component + any security guards. `humon new-tool` /
+   `new-capability` / `new-channel` / `new-provider` scaffold this shape.
 5. Run the full gate (below) before committing.
+
+The full plugin-authoring guide is [`docs/plugins.md`](docs/plugins.md) — read it before
+building anything larger than a single tool.
 
 ## Testing expectations
 

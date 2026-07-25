@@ -82,8 +82,29 @@ All notable changes to Humon are documented here. Format loosely follows
   context compaction, default for routine steps.
 - Docs: quickstart, write-your-first-tool, hardening.
 
+### Extensibility foundation — plugin platform ✅
+- **Capability seam** (`core/capabilities.py` + `Capabilities`/`CapabilityProvider`/
+  `CapabilityContext` in `core/interfaces.py`): a name-keyed `ServiceRegistry` threaded
+  through `ToolContext.services`. Host services register under well-known names (`memory`,
+  `tasks`, `embeddings`); plugin-provided services register via the new `humon.capabilities`
+  entry-point group. Adding a host service no longer edits `ToolContext`.
+- **Fourth entry-point group** `humon.capabilities` with `discover_capabilities()`; config
+  gating via `capabilities.<name>.enabled` + `Config.enabled_capabilities()`, mirroring tools.
+- **Config symmetry for channels & providers**: `ChannelsConfig` is `extra="allow"` with
+  `enabled_map()` / `Config.enabled_channels()` so third-party channels have a config home
+  and are built generically; `ProviderConfig` passes through extra keys for out-of-tree
+  providers. New `state.data_dir` gives each capability private storage
+  (`<data_dir>/capabilities/<name>/`) without importing `state`.
+- **Scaffolding parity**: `humon new-capability` / `new-channel` / `new-provider` alongside
+  `new-tool`, each emitting an installable package with the right entry point and a starter test.
+- **Docs**: `docs/plugins.md` (four seams, the capability pattern, a worked `humon-vault`
+  sketch, and a `humon-code` north star); `CLAUDE.md`/`AGENTS.md` capability-seam rules;
+  `config.example.yaml` capabilities/channels/policy examples.
+- `!capabilities` chat command and `doctor` now report discovered/enabled capabilities.
+- No behaviour change to existing tools/channels/providers; `ctx.memory`/`ctx.tasks` retained.
+
 ## Status
 
-All milestones M1–M5 implemented. 109 unit/integration tests + 22 eval tasks pass;
-CI gate = ruff, ruff-format, mypy (strict on core), import-linter, pytest,
-detect-secrets, evals.
+All milestones M1–M5 implemented, plus a plugin-platform extensibility foundation
+(capability seam + config/scaffold/doc parity across all four extension points). CI gate =
+ruff, ruff-format, mypy (strict on core), import-linter, pytest, detect-secrets, evals.

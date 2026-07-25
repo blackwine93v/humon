@@ -67,3 +67,42 @@ def test_unknown_top_level_key_rejected():
     raw["bogus"] = 1
     with pytest.raises(ConfigError):
         parse_config(raw)
+
+
+def test_enabled_capabilities_only_lists_enabled():
+    raw = _valid()
+    raw["capabilities"] = {"vault": {"enabled": True}, "other": {"enabled": False}}
+    cfg = parse_config(raw)
+    assert cfg.enabled_capabilities() == ["vault"]
+
+
+def test_capability_extra_keys_preserved():
+    raw = _valid()
+    raw["capabilities"] = {"vault": {"enabled": True, "vault_path": "/srv/notes"}}
+    cfg = parse_config(raw)
+    assert cfg.capabilities["vault"].model_dump()["vault_path"] == "/srv/notes"
+
+
+def test_enabled_channels_includes_slack_and_third_party():
+    raw = _valid()
+    raw["channels"] = {
+        "slack": {"enabled": True},
+        "matrix": {"enabled": True, "homeserver": "https://m.example"},
+        "off": {"enabled": False},
+    }
+    cfg = parse_config(raw)
+    enabled = cfg.enabled_channels()
+    assert set(enabled) == {"slack", "matrix"}
+    assert enabled["matrix"]["homeserver"] == "https://m.example"
+
+
+def test_provider_extra_keys_preserved():
+    raw = _valid()
+    raw["provider"]["organization"] = "org-123"
+    cfg = parse_config(raw)
+    assert cfg.provider.model_dump()["organization"] == "org-123"
+
+
+def test_state_data_dir_defaults():
+    cfg = parse_config(_valid())
+    assert cfg.state.data_dir.endswith("/data")
