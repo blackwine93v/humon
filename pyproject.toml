@@ -1,0 +1,111 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "humon"
+version = "0.1.0"
+description = "Self-hosted, single-process AI agent with hands inside your LAN — secure by default."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+authors = [{ name = "Vuong Dao" }]
+keywords = ["agent", "llm", "self-hosted", "slack", "automation", "assistant"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: System :: Systems Administration",
+]
+
+# Lean core: only what the agent loop, config, and offline (Fake) tests need.
+dependencies = [
+    "pydantic>=2.5",
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+slack = ["slack-bolt>=1.18", "aiohttp>=3.9"]
+anthropic = ["anthropic>=0.39"]
+openai = ["openai>=1.30"]
+ollama = ["httpx>=0.27"]
+# Long-term semantic memory. sqlite-vec is a tiny loadable extension.
+memory = ["sqlite-vec>=0.1.1"]
+sysinfo = ["psutil>=5.9"]
+# Everything a full reference deployment wants.
+all = [
+    "humon[slack,anthropic,openai,ollama,memory,sysinfo]",
+]
+dev = [
+    "humon[all]",
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "import-linter>=2.0",
+    "detect-secrets>=1.5",
+    "types-PyYAML",
+]
+
+[project.scripts]
+humon = "humon.cli:main"
+
+# ── Plugin surfaces (PRD §7.7 / FR-7.1) ──────────────────────────────────────
+# Built-in tools/channels/providers are registered here exactly like third-party
+# plugins would be. Installation alone never activates them — config must list them.
+[project.entry-points."humon.tools"]
+shell = "humon.tools.shell:ShellTool"
+files = "humon.tools.files:FilesTool"
+lan = "humon.tools.lan:LanTool"
+schedule = "humon.tools.schedule:ScheduleTool"
+sysinfo = "humon.tools.sysinfo:SysinfoTool"
+memory = "humon.tools.memory:MemoryTool"
+
+[project.entry-points."humon.channels"]
+slack = "humon.channels.slack:SlackChannel"
+
+[project.entry-points."humon.providers"]
+anthropic = "humon.providers.anthropic:AnthropicProvider"
+openai = "humon.providers.openai:OpenAIProvider"
+ollama = "humon.providers.ollama:OllamaProvider"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/humon"]
+
+# ── Tooling ──────────────────────────────────────────────────────────────────
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC", "S", "RUF"]
+# S603/S607: subprocess use is intrinsic to the shell tool and guarded by policy.
+# RUF012: tool/provider metadata (input_schema, permissions) are class attributes
+#   by protocol design; annotating each as ClassVar adds noise without safety.
+ignore = ["S101", "S603", "S607", "RUF012"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S", "B"]
+"evals/**" = ["S"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.mypy]
+python_version = "3.11"
+warn_unused_configs = true
+ignore_missing_imports = true
+
+# Strict typing is enforced on the core only (PRD T-4).
+[[tool.mypy.overrides]]
+module = "humon.core.*"
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+warn_return_any = true
+no_implicit_optional = true
+strict_equality = true

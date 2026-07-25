@@ -1,0 +1,45 @@
+[importlinter]
+root_package = humon
+
+# ── Layering law (PRD §6.1) ──────────────────────────────────────────────────
+# The whole point of the architecture: the agent core knows nothing about Slack,
+# Anthropic, or subprocess — it speaks only the protocols in core.interfaces.
+
+[importlinter:contract:core-independent-of-plugins]
+name = core must not import channels, tools, or providers
+type = forbidden
+source_modules =
+    humon.core
+forbidden_modules =
+    humon.channels
+    humon.tools
+    humon.providers
+
+[importlinter:contract:state-independent-of-plugins]
+name = state must not import channels, tools, or providers
+type = forbidden
+source_modules =
+    humon.state
+forbidden_modules =
+    humon.channels
+    humon.tools
+    humon.providers
+
+[importlinter:contract:plugins-only-touch-the-contract]
+name = channels/tools/providers may not reach into core internals or state
+type = forbidden
+source_modules =
+    humon.channels
+    humon.tools
+    humon.providers
+forbidden_modules =
+    humon.state
+    humon.core.agent
+    humon.core.policy
+    humon.core.session
+    humon.core.registry
+    humon.core.memory
+    humon.core.scheduler
+    humon.core.planner
+    humon.core.reflector
+    humon.core.prompts

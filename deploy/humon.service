@@ -1,0 +1,56 @@
+# Hardened systemd unit for Humon (FR-1.2).
+#
+# Install:
+#   sudo useradd --system --home /var/lib/humon --shell /usr/sbin/nologin humon
+#   sudo mkdir -p /var/lib/humon /etc/humon && sudo chown humon:humon /var/lib/humon
+#   sudo cp deploy/humon.service /etc/systemd/system/humon.service
+#   # Put secrets in systemd credentials (preferred) or an EnvironmentFile:
+#   sudo systemctl edit humon    # add [Service] Environment=... or LoadCredential
+#   sudo systemctl enable --now humon
+#
+# Secrets: prefer LoadCredential (below) over Environment= so tokens never appear
+# in `systemctl show` or the process environment of other users.
+
+[Unit]
+Description=Humon self-hosted AI agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=humon
+Group=humon
+WorkingDirectory=/var/lib/humon
+ExecStart=/opt/humon/.venv/bin/humon run -c /etc/humon/config.yaml
+Restart=always
+RestartSec=5
+
+# ── Resource limits (reference: 4GB RAM host) ────────────────────────────────
+MemoryMax=2G
+MemoryHigh=1500M
+TasksMax=256
+
+# ── Secrets via systemd credentials (FR-6.5) ─────────────────────────────────
+# Create the credential files readable only by root, then reference them here.
+# The app reads e.g. ANTHROPIC_API_KEY from $CREDENTIALS_DIRECTORY at startup.
+LoadCredential=anthropic_api_key:/etc/humon/secrets/anthropic_api_key
+LoadCredential=slack_bot_token:/etc/humon/secrets/slack_bot_token
+LoadCredential=slack_app_token:/etc/humon/secrets/slack_app_token
+
+# ── Sandboxing (secure by default) ───────────────────────────────────────────
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+# The ONLY writable paths. Add tool jail paths here explicitly.
+ReadWritePaths=/var/lib/humon
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,131 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Humon configuration — copy to config.yaml and edit.
+#
+# SECURITY: This file must NEVER contain secrets. API tokens are read from
+# environment variables or systemd LoadCredential only. The loader rejects a
+# config that contains key-like values. See SECURITY.md.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# The LLM "brain".
+provider:
+  # One of the installed providers: anthropic | openai | ollama
+  name: anthropic
+  # Env var that holds the API key (the value is NOT stored here).
+  api_key_env: ANTHROPIC_API_KEY
+  # Optional override for OpenAI-compatible / Ollama endpoints.
+  # base_url: http://127.0.0.1:11434
+
+# Model routing (FR-3.6). `default` is always required. `strong` is used for
+# planning/reflection, `cheap` for routine steps, `embedding` for memory.
+models:
+  default: claude-3-5-sonnet-latest
+  strong: claude-3-5-sonnet-latest
+  cheap: claude-3-5-haiku-latest
+  embedding: voyage-3-lite
+
+# Chat channels. Slack is the v1 default.
+channels:
+  slack:
+    enabled: true
+    # Tokens come from the environment, never inline.
+    bot_token_env: SLACK_BOT_TOKEN
+    app_token_env: SLACK_APP_TOKEN      # xapp- token for Socket Mode
+    # Allowlist — Humon ignores everyone/everything not listed (FR-2.5).
+    allowed_users: []                    # e.g. ["U012ABCDEF"]
+    allowed_channels: []                 # e.g. ["C012ABCDEF"]
+    # Human-in-the-loop approval reactions (FR-2.3).
+    approve_reaction: "white_check_mark" # ✅
+    deny_reaction: "x"                   # ❌
+
+# ── Tools ────────────────────────────────────────────────────────────────────
+# Every tool is DISABLED until it appears here (FR-4 / FR-6.3). Removing a block
+# disables that tool completely.
+tools:
+  shell:
+    enabled: true
+    # Deny-by-default binary allowlist. Read-only coreutils to start.
+    allowed_binaries: ["df", "free", "uptime", "uname", "cat", "ls", "date", "whoami"]
+    # Shell metacharacters (| & ; > < etc.) are rejected unless explicitly enabled.
+    allow_shell_metachars: false
+    timeout_s: 10
+    max_output_bytes: 32768              # 32KB, truncated with a notice
+
+  files:
+    enabled: false
+    # Absolute paths the tool may touch. Empty = nothing readable/writable.
+    jail_paths: []                       # e.g. ["/srv/humon/workspace"]
+    # Writes/deletes are approval-gated regardless of this flag.
+    max_read_bytes: 1048576
+
+  sysinfo:
+    enabled: false
+    journal_max_lines: 200
+
+  lan:
+    enabled: false
+    # Only these CIDRs are reachable; public internet is never routed.
+    allowed_cidrs: ["10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16"]
+    timeout_s: 5
+
+  schedule:
+    enabled: false
+    max_tasks: 50
+
+  memory:
+    enabled: false
+
+# ── Policy engine (FR-6) ─────────────────────────────────────────────────────
+policy:
+  # Global default when no rule matches: allow | deny | require_approval
+  default_decision: deny
+  approval:
+    timeout_s: 600                       # 10 min; timeout == deny (FR-2.3)
+  # Per-permission overrides. Tools declare permissions; they never self-authorize.
+  rules:
+    "fs.read": allow
+    "fs.write": require_approval
+    "fs.delete": require_approval
+    "shell.exec": allow
+    "net.read": allow
+    "net.write": require_approval
+    "sys.read": allow
+    "memory.read": allow
+    "memory.write": allow
+    "schedule.write": require_approval
+
+# ── Loop guards & concurrency (FR-3.3 / FR-3.7) ──────────────────────────────
+limits:
+  max_iterations: 15
+  max_tool_calls: 25
+  task_timeout_s: 600
+  token_budget: 120000
+  max_concurrent_sessions: 2
+
+# ── Memory (FR-5) ────────────────────────────────────────────────────────────
+memory:
+  enabled: true
+  compaction_token_threshold: 8000       # summarize older turns past this
+  long_term_top_k: 5
+  chunk_size: 800
+
+# ── Agent behaviour ──────────────────────────────────────────────────────────
+agent:
+  planning: true                         # plan multi-step tasks (FR-3.2)
+  reflection: true                       # critic pass for >=3-tool tasks (FR-3.4)
+  reflection_min_tools: 3
+
+# ── Persistence ──────────────────────────────────────────────────────────────
+state:
+  db_path: /var/lib/humon/humon.sqlite
+
+# ── Logging (FR-1.4) ─────────────────────────────────────────────────────────
+logging:
+  level: INFO                            # DEBUG | INFO | WARNING | ERROR
+  format: json                           # json | text
+
+# ── Observability (NFR-5) ────────────────────────────────────────────────────
+observability:
+  prometheus:
+    enabled: false
+    bind: 127.0.0.1
+    port: 9464

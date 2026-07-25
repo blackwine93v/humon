@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# Humon runtime state
+*.sqlite
+*.sqlite-*
+*.db
+humon.db*
+config.yaml
+config.local.yaml
+
+# Secrets — must never be committed
+.env
+*.secret
+secrets/
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
