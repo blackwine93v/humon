@@ -44,12 +44,21 @@ def test_openai_requires_api_key(monkeypatch):
         OpenAIProvider({"api_key_env": "OPENAI_API_KEY"})
 
 
-def test_ollama_requires_httpx():
-    # httpx isn't installed in the base test env → constructing raises clearly.
+def test_ollama_construction_depends_on_httpx():
+    # Behaviour depends on whether the [ollama] extra (httpx) is installed:
+    # absent → construction raises a clear ProviderError; present → it succeeds
+    # and configures the base URL. Either way, no network is touched.
+    import importlib.util
+
     from humon.providers.ollama import OllamaProvider
 
-    with pytest.raises(ProviderError):
-        OllamaProvider({})
+    if importlib.util.find_spec("httpx") is None:
+        with pytest.raises(ProviderError):
+            OllamaProvider({})
+    else:
+        provider = OllamaProvider({"base_url": "http://nas.local:11434/"})
+        assert provider.name == "ollama"
+        assert provider._base_url == "http://nas.local:11434"  # trailing slash stripped
 
 
 @pytest.mark.asyncio
