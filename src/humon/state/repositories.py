@@ -171,8 +171,20 @@ class MemoryRepo:
             )
         return await self.db.fetchall("SELECT * FROM memory_notes ORDER BY id DESC")
 
+    async def get(self, note_id: int) -> dict[str, Any] | None:
+        return await self.db.fetchone("SELECT * FROM memory_notes WHERE id = ?", (note_id,))
+
+    async def search_like(self, query: str, limit: int = 5) -> list[dict[str, Any]]:
+        """Keyword fallback when no embedding provider is available."""
+
+        like = f"%{query}%"
+        return await self.db.fetchall(
+            "SELECT * FROM memory_notes WHERE text LIKE ? ORDER BY id DESC LIMIT ?",
+            (like, limit),
+        )
+
     async def forget(self, note_id: int) -> bool:
-        before = await self.db.fetchone("SELECT id FROM memory_notes WHERE id = ?", (note_id,))
+        before = await self.get(note_id)
         if not before:
             return False
         await self.db.execute("DELETE FROM memory_notes WHERE id = ?", (note_id,))

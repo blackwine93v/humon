@@ -16,12 +16,15 @@ from .config import Config
 from .core.agent import Agent
 from .core.errors import HumonError
 from .core.interfaces import InboundMessage
+from .core.memory import MemoryManager
+from .core.planner import LLMPlanner
 from .core.policy import PolicyEngine
 from .core.registry import discover_channels, discover_providers, discover_tools
 from .core.session import SessionBusy, SessionManager
 from .logging import get_logger
 from .state.db import Database
 from .state.repositories import AuditRepo, MemoryRepo, SessionRepo, TaskRepo
+from .state.vectors import VectorIndex
 
 
 class App:
@@ -38,6 +41,7 @@ class App:
         self.audit_repo: AuditRepo | None = None
         self.memory_repo: MemoryRepo | None = None
         self.task_repo: TaskRepo | None = None
+        self.memory: MemoryManager | None = None
         self.tools: dict[str, Any] = {}
 
     async def build(self) -> None:
@@ -53,6 +57,27 @@ class App:
         self.sessions = SessionManager(
             self.session_repo, self.config.limits.max_concurrent_sessions
         )
+
+        # Long-term memory (FR-5): sqlite-vec index + manager, if enabled.
+        memory: MemoryManager | None = None
+        if self.config.memory.enabled:
+            vectors = VectorIndex(self.db)
+            await vectors.setup()
+            memory = MemoryManager(
+                memory_repo=self.memory_repo,
+                session_repo=self.session_repo,
+                vectors=vectors,
+                provider=provider,
+                config=self.config.memory,
+            )
+            self.memory = memory
+
+        planner = (
+            LLMPlanner(provider, self.config.models.strong_or_default())
+            if self.config.agent.planning
+            else None
+        )
+
         self.agent = Agent(
             provider=provider,
             tools=self.tools,
@@ -61,6 +86,8 @@ class App:
             session_repo=self.session_repo,
             audit=self.audit_repo,
             logger=get_logger("humon.agent"),
+            planner=planner,
+            memory=memory,
         )
         self._channels = self._build_channels()
         self.logger.info(
@@ -68,6 +95,8 @@ class App:
             provider=provider.name,
             tools=list(self.tools),
             channels=[c.name for c in self._channels],
+            memory=memory is not None,
+            vectors=bool(memory and getattr(memory.vectors, "enabled", False)),
         )
 
     # ── builders ──────────────────────────────────────────────────────────────

@@ -115,6 +115,19 @@ class ToolResult(TypedDict):
 ApprovalFn = Callable[[str], Awaitable[bool]]
 
 
+class MemoryStore(Protocol):
+    """Long-term memory surface exposed to the ``memory`` tool.
+
+    Lets the tool store/recall notes without importing ``core`` internals or
+    ``state`` (layering). The app injects a concrete implementation.
+    """
+
+    async def store(self, text: str, kind: str = "note", session_id: str | None = None) -> int: ...
+    async def search(self, query: str, k: int = 5) -> list[str]: ...
+    async def list_notes(self) -> list[tuple[int, str, str]]: ...  # (id, kind, text)
+    async def forget(self, note_id: int) -> bool: ...
+
+
 @dataclass
 class ToolContext:
     """Everything a tool needs at execution time — and nothing more.
@@ -122,6 +135,7 @@ class ToolContext:
     A tool receives its own config slice and jail paths; it cannot see other
     tools' config or reach outside its jail. ``request_approval`` routes a
     human-in-the-loop prompt through whatever channel started the session.
+    ``memory`` is present only for tools that declare a need for it.
     """
 
     session_id: str
@@ -129,6 +143,7 @@ class ToolContext:
     jail_paths: list[str]
     logger: Any
     request_approval: ApprovalFn
+    memory: MemoryStore | None = None
 
 
 @runtime_checkable

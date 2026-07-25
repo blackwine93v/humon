@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import sqlite3
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -84,6 +85,16 @@ class Database:
                 return [dict(r) for r in rows]
 
             return await asyncio.to_thread(_run)
+
+    async def run(self, fn: Callable[[sqlite3.Connection], Any]) -> Any:
+        """Run an arbitrary callable against the connection, under the lock.
+
+        Used for operations stdlib helpers don't cover (e.g. loading the
+        sqlite-vec extension and MATCH queries).
+        """
+
+        async with self._lock:
+            return await asyncio.to_thread(fn, self.conn)
 
     async def close(self) -> None:
         if self._conn is not None:

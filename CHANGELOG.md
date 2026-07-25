@@ -36,9 +36,24 @@ All notable changes to Humon are documented here. Format loosely follows
   untrusted-output wrapping, and a structural prompt-injection canary.
 - M2 exit test: file write triggers approval; deny blocks it; audit shows both.
 
+### M3 — Planning & memory ✅
+- Planner (`core/planner.py`): turns multi-step requests into an explicit numbered
+  plan (shown in-thread) using the strong model; `replan()` hook for step failure.
+- Long-term memory (`core/memory.py` + `state/vectors.py`): semantic notes via
+  embeddings + sqlite-vec, with keyword-search fallback when no embedding provider
+  is available; episodic outcome records injected as hints on similar tasks.
+- Context compaction (FR-3.5): older turns summarized into a per-session summary
+  when the transcript exceeds the token threshold; the agent runs on a recent
+  window + summary.
+- `memory` tool (remember/recall/list/forget) reaching storage through a
+  `MemoryStore` handle on `ToolContext` (no layering violation).
+- `MemoryStore` protocol + `ToolContext.memory`; `Tool.permissions_for` used again
+  for per-action gating.
+- `!` chat commands (`!status !cancel !sessions !tools !help !audit !memory`).
+- M3 exit test: multi-step task shows a plan, executes, and a fact stored in one
+  session is recalled in a later session.
+
 ### Planned
-- M3 — planning/replanning, context compaction, long-term memory (sqlite-vec),
-  `memory` tool, `!` commands.
 - M4 — reflection pass, `schedule` + `lan` tools, session resume after restart.
 - M5 — OpenAI/Ollama providers, entry-point plugins, `humon new-tool`, eval harness
   in CI, docs, model routing.

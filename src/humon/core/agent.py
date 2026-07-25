@@ -26,6 +26,7 @@ from .interfaces import (
     ApprovalFn,
     CompletionRequest,
     LLMProvider,
+    MemoryStore,
     Message,
     PolicyDecision,
     Tool,
@@ -46,7 +47,9 @@ class Reflector(Protocol):
     async def review(self, request: str, draft: str, transcript: list[Message]) -> str: ...
 
 
-class MemoryManager(Protocol):
+class MemoryManager(MemoryStore, Protocol):
+    """What the agent needs from memory — a superset of the tool-facing MemoryStore."""
+
     async def retrieve_hints(self, session_id: str, query: str) -> str: ...
     async def record_episode(
         self, session_id: str, task: str, tools_used: list[str], success: bool, note: str
@@ -130,6 +133,10 @@ class Agent:
         await self.sessions.add_message(session_id, Message(role="user", content=user_text))
 
         system = SYSTEM_PROMPT
+        # Compacted history summary (FR-3.5), if the session has one.
+        session_row = await self.sessions.get(session_id)
+        if session_row and session_row.get("summary"):
+            system += f"\n\nSummary of earlier conversation:\n{session_row['summary']}"
         if self.memory is not None:
             hints = await self.memory.retrieve_hints(session_id, user_text)
             if hints:
@@ -145,7 +152,8 @@ class Agent:
                 pretty = "\n".join(f"{i}. {s}" for i, s in enumerate(plan, 1))
                 await note(f"*Plan:*\n{pretty}")
 
-        messages = await self.sessions.history(session_id)
+        # Windowed history; older turns live in the compacted summary above.
+        messages = await self.sessions.history(session_id, limit=60)
         tool_defs = self._tool_defs()
 
         outcome = TaskOutcome(text="")
@@ -292,6 +300,7 @@ class Agent:
             jail_paths=list(self._jail_for(name)),
             logger=self.logger,
             request_approval=request_approval,
+            memory=self.memory,
         )
         started = time.monotonic()
         try:

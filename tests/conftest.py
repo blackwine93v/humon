@@ -63,6 +63,25 @@ async def db() -> Database:
     await database.close()
 
 
+async def build_memory(db: Database, provider: Any) -> Any:
+    """Construct a wired MemoryManager for tests (vector path if sqlite-vec present)."""
+
+    from humon.config import MemoryConfig
+    from humon.core.memory import MemoryManager
+    from humon.state.repositories import MemoryRepo, SessionRepo
+    from humon.state.vectors import VectorIndex
+
+    vectors = VectorIndex(db)
+    await vectors.setup()
+    return MemoryManager(
+        memory_repo=MemoryRepo(db),
+        session_repo=SessionRepo(db),
+        vectors=vectors,
+        provider=provider,
+        config=MemoryConfig(),
+    )
+
+
 @pytest.fixture
 def repos(db: Database) -> dict[str, Any]:
     return {
