@@ -96,7 +96,7 @@ the single shared vocabulary. Never widen a layer's imports to "make it work".
 
 ```bash
 ruff check src tests evals
-ruff format --check src tests
+ruff format --check src tests evals
 mypy src/humon/core          # strict on core
 lint-imports                 # layering
 pytest -q
