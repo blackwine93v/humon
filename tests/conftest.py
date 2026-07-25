@@ -7,8 +7,15 @@ from typing import Any
 import pytest
 
 from humon.config import Config, parse_config
+from humon.logging import StructuredLogger, get_logger
 from humon.state.db import Database
 from humon.state.repositories import AuditRepo, MemoryRepo, SessionRepo, TaskRepo
+
+
+def make_logger() -> StructuredLogger:
+    """A production-shaped structured logger (accepts kwargs) for tool tests."""
+
+    return get_logger("humon.test")
 
 
 def make_config(**overrides: Any) -> Config:

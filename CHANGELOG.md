@@ -22,9 +22,21 @@ All notable changes to Humon are documented here. Format loosely follows
 - CI: ruff, mypy (strict on core), pytest, import-linter, detect-secrets.
 - Exit criterion test: "how much disk is free?" → shell tool → answer.
 
+### M2 — Safety & sessions ✅
+- Human-in-the-loop approval flow: policy `require_approval` routes through the
+  channel; Slack collects approvals via emoji reactions; timeout == deny.
+- `files` tool with jail paths, path canonicalization, and symlink-escape
+  prevention; per-operation permissions (read allowed, write/delete approval-gated).
+- `sysinfo` tool: read-only CPU/mem/disk/service/journal (stdlib fallback, no extra
+  dependency required).
+- Per-action permission refinement (`Tool.permissions_for`) so a single tool can
+  gate different operations differently — the policy engine still decides.
+- `SECURITY.md` threat model + hardening guide; `docs/hardening.md`.
+- Security regression tests: symlink escape, shell metachar injection (parametrized),
+  untrusted-output wrapping, and a structural prompt-injection canary.
+- M2 exit test: file write triggers approval; deny blocks it; audit shows both.
+
 ### Planned
-- M2 — approval via reactions, `files` + `sysinfo` tools, session threading, loop
-  guards, SECURITY.md, security regression tests.
 - M3 — planning/replanning, context compaction, long-term memory (sqlite-vec),
   `memory` tool, `!` commands.
 - M4 — reflection pass, `schedule` + `lan` tools, session resume after restart.

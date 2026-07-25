@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-import logging
-
 import pytest
 
+from conftest import make_logger
 from humon.core.interfaces import ToolContext
 from humon.tools.shell import ShellTool
 
@@ -18,7 +17,7 @@ def ctx(config: dict) -> ToolContext:
         session_id="t",
         config=config,
         jail_paths=[],
-        logger=logging.getLogger("test"),
+        logger=make_logger(),
         request_approval=_approve,
     )
 

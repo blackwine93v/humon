@@ -245,7 +245,12 @@ class Agent:
             )
             return f"Error: tool '{name}' is not available."
 
-        result = self.policy.check(name, tool.permissions)
+        # A tool may refine which permissions a *specific* call needs (e.g. files
+        # read vs write) via an optional permissions_for(args); it still does not
+        # decide allow/deny — the policy engine does.
+        refine = getattr(tool, "permissions_for", None)
+        perms = refine(args) if callable(refine) else tool.permissions
+        result = self.policy.check(name, perms)
         approver: str | None = None
 
         if result.decision is PolicyDecision.DENY:
