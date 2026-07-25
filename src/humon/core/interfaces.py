@@ -128,6 +128,17 @@ class MemoryStore(Protocol):
     async def forget(self, note_id: int) -> bool: ...
 
 
+class TaskStore(Protocol):
+    """Scheduled-task surface exposed to the ``schedule`` tool (same layering
+    reasoning as MemoryStore)."""
+
+    async def add_task(
+        self, description: str, schedule: str, session_id: str | None = None
+    ) -> tuple[int, float | None]: ...  # (task_id, next_run epoch or None)
+    async def list_tasks(self) -> list[tuple[int, str, str, float | None]]: ...
+    async def delete_task(self, task_id: int) -> bool: ...
+
+
 @dataclass
 class ToolContext:
     """Everything a tool needs at execution time — and nothing more.
@@ -144,6 +155,7 @@ class ToolContext:
     logger: Any
     request_approval: ApprovalFn
     memory: MemoryStore | None = None
+    tasks: TaskStore | None = None
 
 
 @runtime_checkable

@@ -29,6 +29,7 @@ from .interfaces import (
     MemoryStore,
     Message,
     PolicyDecision,
+    TaskStore,
     Tool,
     ToolContext,
     ToolDef,
@@ -81,6 +82,7 @@ class Agent:
         planner: Planner | None = None,
         reflector: Reflector | None = None,
         memory: MemoryManager | None = None,
+        tasks: TaskStore | None = None,
     ) -> None:
         self.provider = provider
         self.tools = tools
@@ -92,6 +94,7 @@ class Agent:
         self.planner = planner
         self.reflector = reflector
         self.memory = memory
+        self.tasks = tasks
 
     def _tool_defs(self) -> list[ToolDef]:
         return [
@@ -301,6 +304,7 @@ class Agent:
             logger=self.logger,
             request_approval=request_approval,
             memory=self.memory,
+            tasks=self.tasks,
         )
         started = time.monotonic()
         try:

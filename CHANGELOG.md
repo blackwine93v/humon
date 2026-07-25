@@ -53,7 +53,21 @@ All notable changes to Humon are documented here. Format loosely follows
 - M3 exit test: multi-step task shows a plan, executes, and a fact stored in one
   session is recalled in a later session.
 
+### M4 — Reflection, scheduler, LAN ✅
+- Reflector (`core/reflector.py`): critic pass over the draft answer for tasks that
+  used ≥3 tool calls; best-effort (keeps the draft on error).
+- `lan` tool: ping / TCP check / HTTP GET, restricted to RFC1918 (or configured)
+  CIDRs — hostnames are resolved and every address must be private, so it can never
+  reach the public internet.
+- `schedule` tool + in-process `Scheduler` (`core/scheduler.py`): create/list/delete
+  recurring or one-shot tasks (`once`, `once:<iso>`, `every:<seconds>`, `daily@HH:MM`),
+  reached via `TaskStore` on `ToolContext`. Creating a task is approval-gated
+  (pre-authorizes it, OQ#2); it then runs unattended under the same policy engine.
+- Session/task resume after restart: tasks live in SQLite, so a fresh Scheduler
+  picks them up on startup.
+- M4 exit test: a "check the NAS every morning at 8 and DM me" task is created,
+  survives a simulated restart, executes, delivers a message, and reschedules.
+
 ### Planned
-- M4 — reflection pass, `schedule` + `lan` tools, session resume after restart.
 - M5 — OpenAI/Ollama providers, entry-point plugins, `humon new-tool`, eval harness
   in CI, docs, model routing.

@@ -19,7 +19,9 @@ from .core.interfaces import InboundMessage
 from .core.memory import MemoryManager
 from .core.planner import LLMPlanner
 from .core.policy import PolicyEngine
+from .core.reflector import LLMReflector
 from .core.registry import discover_channels, discover_providers, discover_tools
+from .core.scheduler import Scheduler
 from .core.session import SessionBusy, SessionManager
 from .logging import get_logger
 from .state.db import Database
@@ -42,6 +44,8 @@ class App:
         self.memory_repo: MemoryRepo | None = None
         self.task_repo: TaskRepo | None = None
         self.memory: MemoryManager | None = None
+        self.scheduler: Scheduler | None = None
+        self._channel_by_name: dict[str, Any] = {}
         self.tools: dict[str, Any] = {}
 
     async def build(self) -> None:
@@ -77,6 +81,17 @@ class App:
             if self.config.agent.planning
             else None
         )
+        reflector = (
+            LLMReflector(provider, self.config.models.strong_or_default())
+            if self.config.agent.reflection
+            else None
+        )
+
+        # In-process scheduler (FR-4.4): reached by the schedule tool, resumes from
+        # SQLite on restart.
+        self.scheduler = Scheduler(
+            self.task_repo, self._run_scheduled, get_logger("humon.scheduler")
+        )
 
         self.agent = Agent(
             provider=provider,
@@ -87,9 +102,12 @@ class App:
             audit=self.audit_repo,
             logger=get_logger("humon.agent"),
             planner=planner,
+            reflector=reflector,
             memory=memory,
+            tasks=self.scheduler,
         )
         self._channels = self._build_channels()
+        self._channel_by_name = {c.name: c for c in self._channels}
         self.logger.info(
             "app.built",
             provider=provider.name,
@@ -146,18 +164,56 @@ class App:
                 pass
         for channel in self._channels:
             await channel.start(self._make_handler(channel))
+        if self.scheduler is not None:
+            await self.scheduler.start()  # resumes tasks persisted in SQLite
         self.logger.info("app.running")
         await self._shutdown.wait()
         await self.shutdown()
 
     async def shutdown(self) -> None:
         self.logger.info("app.shutdown")
+        if self.scheduler is not None:
+            await self.scheduler.stop()
         for channel in self._channels:
             try:
                 await channel.stop()
             except Exception:
                 self.logger.exception("channel.stop.error", channel=channel.name)
         await self.db.close()
+
+    async def _run_scheduled(self, task_row: dict[str, Any]) -> None:
+        """Execute a due scheduled task and deliver the result to its channel.
+
+        Scheduled tasks were pre-approved at creation (their creation was itself
+        approval-gated), so they run with an auto-approver.
+        """
+
+        assert self.sessions and self.session_repo and self.agent
+        session_id = task_row.get("session_id")
+        if not session_id:
+            self.logger.warning("scheduler.no_session", task_id=task_row.get("id"))
+            return
+        session = await self.session_repo.get(session_id)
+        channel = self._channel_by_name.get(session["channel"]) if session else None
+        if channel is None:
+            self.logger.warning("scheduler.no_channel", session=session_id)
+            return
+
+        async def auto_approve(_summary: str) -> bool:
+            return True
+
+        try:
+            outcome = await self.sessions.run(
+                session_id,
+                lambda: self.agent.run_task(  # type: ignore[union-attr]
+                    session_id=session_id,
+                    user_text=task_row["description"],
+                    request_approval=auto_approve,
+                ),
+            )
+            await channel.send(session_id, f":alarm_clock: {outcome.text}")
+        except SessionBusy:
+            self.logger.info("scheduler.session_busy", session=session_id)
 
     # ── message handling ──────────────────────────────────────────────────────
     def _make_handler(self, channel: Any) -> Any:
